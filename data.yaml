@@ -1,0 +1,16 @@
+# YOLO Dataset Configuration
+# Citra KTR Map Project
+
+# Dataset paths
+path: .
+train: train
+val: val
+
+# Classes (4 classes for smoking detection)
+names:
+  0: Rokok
+  1: Merokok
+  2: Asbak
+
+# Number of classes
+nc: 3

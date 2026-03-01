@@ -1,0 +1,433 @@
+/* ===== CUSTOM COMPONENTS ===== */
+
+/* Photo Preview */
+.photo-preview {
+    display: none;
+    margin-top: 12px;
+}
+
+.photo-preview.active {
+    display: block;
+}
+
+.photo-preview img {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    animation: slideUp 0.3s ease;
+}
+
+/* Prediction Result */
+.prediction-result {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+}
+
+.prediction-result.active {
+    display: block;
+}
+
+.prediction-result.loading {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+}
+
+.prediction-result.success {
+    background: #d4edda;
+    border: 1px solid #28a745;
+    color: #155724;
+}
+
+.prediction-result.error {
+    background: #f8d7da;
+    border: 1px solid #dc3545;
+    color: #721c24;
+}
+
+.prediction-result .detection-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.prediction-result .detection-item:last-child {
+    border-bottom: none;
+}
+
+.prediction-result .compliance-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    margin-top: 8px;
+}
+
+.prediction-result .compliance-badge.patuh {
+    background: #28a745;
+    color: white;
+}
+
+.prediction-result .compliance-badge.ringan {
+    background: #ffc107;
+    color: #212529;
+}
+
+.prediction-result .compliance-badge.berat {
+    background: #dc3545;
+    color: white;
+}
+
+.prediction-result .compliance-badge.patuh-auto {
+    background: #17a2b8;
+    color: white;
+}
+
+/* Map Container */
+#map {
+    z-index: 1;
+    background: #f1f5f9;
+    min-height: 400px;
+    height: 100%;
+}
+
+/* Leaflet Popup Styling */
+.leaflet-popup-content-wrapper {
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    padding: 0;
+}
+
+.leaflet-popup-content {
+    margin: 0;
+    min-width: 200px;
+}
+
+.leaflet-popup-close-button {
+    width: 28px !important;
+    height: 28px !important;
+    top: 8px !important;
+    right: 8px !important;
+    background: #f1f5f9 !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    color: #64748b !important;
+    font-size: 16px !important;
+}
+
+.leaflet-popup-close-button:hover {
+    background: #e2e8f0 !important;
+    color: #334155 !important;
+}
+
+.popup-content {
+    padding: 16px;
+}
+
+.popup-content h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+    padding-right: 20px;
+}
+
+.popup-category {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.popup-category.patuh {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.popup-category.ringan {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.popup-category.berat {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.popup-photo {
+    width: 100%;
+    max-height: 140px;
+    object-fit: cover;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+.popup-coords {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    font-family: monospace;
+}
+
+.popup-delete {
+    width: 100%;
+    padding: 10px;
+    background: #fef2f2;
+    color: #dc2626;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.popup-delete:hover {
+    background: #fee2e2;
+    transform: scale(1.02);
+}
+
+/* Custom Marker */
+.custom-marker {
+    background: transparent;
+    border: none;
+}
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toast {
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+    animation: slideInRight 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 280px;
+}
+
+.toast.success {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-left: 4px solid #15803d;
+}
+
+.toast.error {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border-left: 4px solid #b91c1c;
+}
+
+.toast.info {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border-left: 4px solid #1d4ed8;
+}
+
+.toast i {
+    font-size: 18px;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn 0.2s ease;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    animation: modalPop 0.3s ease;
+}
+
+@keyframes modalPop {
+    0% {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Filter Button States */
+.filter-btn {
+    transition: all 0.2s ease;
+}
+
+.filter-btn.active {
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.filter-btn[data-filter="all"].active {
+    background: #1e293b !important;
+}
+
+.filter-btn[data-filter="patuh"].active {
+    background: #22c55e !important;
+}
+
+.filter-btn[data-filter="ringan"].active {
+    background: #eab308 !important;
+}
+
+.filter-btn[data-filter="berat"].active {
+    background: #ef4444 !important;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    #map {
+        min-height: 400px;
+    }
+}
+
+@media (max-width: 768px) {
+    .toast {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        min-width: auto;
+    }
+    
+    #map {
+        min-height: 300px;
+    }
+}
+
+/* Focus States */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+/* Input Validation States */
+input:invalid:not(:placeholder-shown),
+select:invalid:not(:placeholder-shown) {
+    border-color: #ef4444;
+}
+
+input:valid:not(:placeholder-shown),
+select:valid:not(:placeholder-shown) {
+    border-color: #22c55e;
+}
+
+/* Loading States */
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Leaflet Controls */
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+    background: white !important;
+    color: #334155 !important;
+    border: none !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+}
+
+.leaflet-control-zoom a:hover {
+    background: #f1f5f9 !important;
+    color: #1e293b !important;
+}
+
+.leaflet-control-zoom-in {
+    border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.leaflet-control-attribution {
+    background: rgba(255, 255, 255, 0.9) !important;
+    padding: 4px 8px !important;
+    font-size: 10px !important;
+}
