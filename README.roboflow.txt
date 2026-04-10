@@ -1,8 +1,8 @@
 
-KTR - v1 2026-02-17 2:51pm
+KTR - v2 2026-04-10 3:44pm
 ==============================
 
-This dataset was exported via roboflow.com on February 17, 2026 at 7:51 AM GMT
+This dataset was exported via roboflow.com on April 10, 2026 at 8:45 AM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,7 +17,7 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 99 images.
+The dataset includes 407 images.
 Ktr are annotated in YOLOv11 format.
 
 The following pre-processing was applied to each image:
