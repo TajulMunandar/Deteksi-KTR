@@ -13,6 +13,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from ultralytics import YOLO
 import torch
+import piexif
 
 # Configuration
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -59,7 +60,50 @@ def load_model():
         return False
 
 
-def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD):
+def extract_gps_data(image_path):
+    """Extract latitude and longitude from image EXIF metadata."""
+    try:
+        exif_dict = piexif.load(image_path)
+        gps_data = exif_dict.get('GPS', {})
+
+        if not gps_data:
+            return None
+
+        # Extract latitude
+        lat_ref = gps_data.get(piexif.GPSIFD.GPSLatitudeRef)
+        lat = gps_data.get(piexif.GPSIFD.GPSLatitude)
+        if lat:
+            lat_deg = lat[0][0] / lat[0][1]
+            lat_min = lat[1][0] / lat[1][1]
+            lat_sec = lat[2][0] / lat[2][1]
+            latitude = lat_deg + (lat_min / 60.0) + (lat_sec / 3600.0)
+            if lat_ref == 'S':
+                latitude = -latitude
+        else:
+            latitude = None
+
+        # Extract longitude
+        lon_ref = gps_data.get(piexif.GPSIFD.GPSLongitudeRef)
+        lon = gps_data.get(piexif.GPSIFD.GPSLongitude)
+        if lon:
+            lon_deg = lon[0][0] / lon[0][1]
+            lon_min = lon[1][0] / lon[1][1]
+            lon_sec = lon[2][0] / lon[2][1]
+            longitude = lon_deg + (lon_min / 60.0) + (lon_sec / 3600.0)
+            if lon_ref == 'W':
+                longitude = -longitude
+        else:
+            longitude = None
+
+        if latitude is not None and longitude is not None:
+            return {'latitude': latitude, 'longitude': longitude}
+        return None
+    except Exception as e:
+        print(f"Error extracting GPS data: {e}")
+        return None
+
+
+def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD, gps_data=None):
     global is_predicting
     if not model_loaded:
         load_model()
@@ -108,13 +152,18 @@ def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD):
     else:
         compliance = {'level': 'patuh', 'status': 'Patuh', 'color': 'green'}
     
-    return {
+    result = {
         'detections': detections,
         'has_detections': len(detections) > 0,
         'detected_classes': detected_classes,
         'compliance': compliance,
         'summary': {'has_merokok': has_merokok, 'has_rokok': has_rokok, 'total': len(detections)}
     }
+
+    if gps_data:
+        result['gps'] = gps_data
+
+    return result
 
 
 # Routes
@@ -143,8 +192,13 @@ def predict():
     filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
-    
-    result = predict_image(filepath, confidence)
+
+    # Extract GPS data from image
+    gps_data = extract_gps_data(filepath)
+    if gps_data:
+        print(f"GPS data extracted: {gps_data}")
+
+    result = predict_image(filepath, confidence, gps_data)
     
     # Cleanup
     try:

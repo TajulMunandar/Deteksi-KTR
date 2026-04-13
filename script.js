@@ -166,7 +166,7 @@ function validateForm() {
     }
 
     if (!latitudeInput.value || !longitudeInput.value) {
-        showToast('Mohon klik pada peta untuk memilih lokasi!', 'error');
+        showToast('Mohon upload foto dengan GPS atau klik peta untuk memilih lokasi!', 'error');
         return false;
     }
 
@@ -278,6 +278,13 @@ async function predictImage(file) {
              badgeClass === 'ringan' ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 
              'bg-green-50 border-green-300 text-green-700');
         
+        // Check for GPS data and auto-fill coordinates
+        if (result.gps) {
+            latitudeInput.value = result.gps.latitude.toFixed(6);
+            longitudeInput.value = result.gps.longitude.toFixed(6);
+            showToast('Koordinat otomatis diambil dari metadata foto!', 'success');
+        }
+
         predictionResult.innerHTML = `
             <div><strong>Deteksi:</strong></div>
             ${detectionsHTML}
