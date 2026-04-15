@@ -5,6 +5,7 @@ YOLOv11-based smoking detection API.
 """
 
 import os
+import csv
 import threading
 from datetime import datetime
 
@@ -20,6 +21,14 @@ PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(PROJECT_DIR, "runs", "train", "exp", "weights")
 BEST_MODEL = os.path.join(MODEL_DIR, "best.pt")
 UPLOAD_FOLDER = "uploads"
+DATABASE_FILE = "database_detections.csv"
+
+# CSV Database header fields
+DB_FIELDS = [
+    'id', 'timestamp', 'latitude', 'longitude', 
+    'location_name', 'status', 'level', 'total_detections', 
+    'has_merokok', 'has_rokok', 'filename'
+]
 
 CLASS_NAMES = {0: 'Merokok', 1: 'Rokok', 2: 'Merokok', 3: 'Rokok'}
 CONFIDENCE_THRESHOLD = 0.25
@@ -34,8 +43,74 @@ is_predicting = False
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+# Initialize CSV Database
+def init_database():
+    if not os.path.exists(DATABASE_FILE):
+        with open(DATABASE_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=DB_FIELDS)
+            writer.writeheader()
+
+def save_to_database(result, filename=None):
+    init_database()
+    
+    # Get next ID
+    row_count = 0
+    with open(DATABASE_FILE, 'r', encoding='utf-8') as f:
+        row_count = sum(1 for line in f) - 1  # minus header
+    
+    gps = result.get('gps', {})
+    summary = result.get('summary', {})
+    compliance = result.get('compliance', {})
+    
+    record = {
+        'id': row_count + 1,
+        'timestamp': datetime.now().isoformat(),
+        'latitude': gps.get('latitude', ''),
+        'longitude': gps.get('longitude', ''),
+        'location_name': result.get('location_name', ''),
+        'status': compliance.get('status', ''),
+        'level': compliance.get('level', ''),
+        'total_detections': summary.get('total', 0),
+        'has_merokok': summary.get('has_merokok', False),
+        'has_rokok': summary.get('has_rokok', False),
+        'filename': filename or ''
+    }
+    
+    with open(DATABASE_FILE, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=DB_FIELDS)
+        writer.writerow(record)
+
+def get_all_detections():
+    init_database()
+    detections = []
+    with open(DATABASE_FILE, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # Convert numeric fields
+            row['id'] = int(row['id'])
+            row['total_detections'] = int(row['total_detections'])
+            row['has_merokok'] = row['has_merokok'] == 'True'
+            row['has_rokok'] = row['has_rokok'] == 'True'
+            if row['latitude']:
+                row['latitude'] = float(row['latitude'])
+            if row['longitude']:
+                row['longitude'] = float(row['longitude'])
+            detections.append(row)
+    return detections
+
+init_database()
+
 app = Flask(__name__, template_folder=PROJECT_DIR, static_folder=PROJECT_DIR, static_url_path='')
-CORS(app)
+CORS(app, supports_credentials=True, origins="*")
+
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', '*')
+        return response, 200
 
 
 def get_device():
@@ -176,6 +251,149 @@ def index():
 def health():
     return jsonify({'status': 'healthy', 'model_loaded': model_loaded})
 
+@app.route('/history', methods=['GET'])
+def get_history():
+    data = get_all_detections()
+    return jsonify({
+        'count': len(data),
+        'detections': data
+    })
+
+@app.route('/clear-all', methods=['DELETE', 'OPTIONS'])
+def clear_all_data():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', '*')
+        return response
+    
+    try:
+        init_database()
+        
+        # Hapus SEMUA file foto di folder uploads
+        for filename in os.listdir(UPLOAD_FOLDER):
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            except:
+                pass
+        
+        # Kosongkan database CSV
+        with open(DATABASE_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=DB_FIELDS)
+            writer.writeheader()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Clear all error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/delete/<int:id>', methods=['DELETE', 'OPTIONS'])
+def delete_detection(id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', '*')
+        return response
+    
+    try:
+        init_database()
+        rows = []
+        deleted_filename = None
+        
+        # Baca semua baris
+        with open(DATABASE_FILE, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if int(row['id']) == id:
+                    deleted_filename = row['filename']
+                else:
+                    rows.append(row)
+        
+        # Tulis ulang tanpa baris yang dihapus
+        with open(DATABASE_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=DB_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+        
+        # Hapus file foto juga jika ada
+        if deleted_filename:
+            photo_path = os.path.join(UPLOAD_FOLDER, deleted_filename)
+            if os.path.exists(photo_path):
+                os.remove(photo_path)
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Delete error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/save', methods=['POST', 'OPTIONS'])
+def save_manual():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', '*')
+        return response
+        
+    try:
+        location_name = request.form.get('location_name')
+        category = request.form.get('category')
+        latitude = request.form.get('latitude', type=float)
+        longitude = request.form.get('longitude', type=float)
+        
+        if not all([location_name, category, latitude, longitude]):
+            return jsonify({'success': False, 'error': 'Data tidak lengkap'}), 400
+        
+        # Ambil nama foto dari frontend (foto sudah diupload sebelumnya)
+        photo_filename = request.form.get('photo_filename', '')
+        
+        # Jika upload foto baru juga diperbolehkan
+        if not photo_filename and 'photo' in request.files:
+            photo = request.files['photo']
+            if photo.filename:
+                photo_filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{photo.filename}")
+                photo_path = os.path.join(UPLOAD_FOLDER, photo_filename)
+                photo.save(photo_path)
+        
+        # Mapping category ke compliance status
+        compliance_map = {
+            'patuh': {'status': 'Patuh', 'level': 'patuh'},
+            'ringan': {'status': 'Tidak Patuh Ringan', 'level': 'tidak_patuh_ringan'},
+            'berat': {'status': 'Tidak Patuh Berat', 'level': 'tidak_patuh_berat'}
+        }
+        
+        compliance = compliance_map.get(category, compliance_map['berat'])
+        
+        # Buat result format untuk disimpan ke database
+        result = {
+            'gps': {'latitude': latitude, 'longitude': longitude},
+            'location_name': location_name,
+            'summary': {
+                'total': 1,
+                'has_merokok': category == 'berat',
+                'has_rokok': category == 'ringan'
+            },
+            'compliance': compliance
+        }
+        
+        safe_location = location_name.replace(' ', '_') if location_name else 'unknown'
+        filename = f"manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_location}"
+        
+        # Simpan ke database
+        save_to_database(result, photo_filename or filename)
+        
+        return jsonify({'success': True, 'message': 'Data tersimpan'})
+        
+    except Exception as e:
+        print(f"Save error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -200,13 +418,13 @@ def predict():
 
     result = predict_image(filepath, confidence, gps_data)
     
-    # Cleanup
-    try:
-        os.remove(filepath)
-    except:
-        pass
+    # HAPUS otomatis simpan DB. Foto TETAP disimpan di uploads, tidak dihapus.
+    # User harus klik tombol SIMPAN secara manual untuk masuk ke database
     
-    return jsonify(result)
+    return jsonify({
+        **result,
+        'photo_filename': filename
+    })
 
 
 if __name__ == '__main__':

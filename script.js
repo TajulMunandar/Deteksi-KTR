@@ -4,6 +4,7 @@ let markers = [];
 let heatmapLayer = null;
 let currentFilter = 'all';
 let violationData = [];
+let currentPhotoFilename = null;
 
 // DOM Elements
 const form = document.getElementById('violationForm');
@@ -115,7 +116,7 @@ function setupEventListeners() {
 }
 
 // ===== FORM HANDLING =====
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
     e.preventDefault();
 
     // Validate form
@@ -123,39 +124,72 @@ function handleFormSubmit(e) {
         return;
     }
 
-    // Create violation object
-    const categoryValue = autoCategory.querySelector('span')?.textContent || 'Unknown';
-    let categoryKey = 'berat';
-    if (categoryValue.includes('RINGAN')) {
-        categoryKey = 'ringan';
-    } else if (categoryValue.includes('PATUH')) {
-        categoryKey = 'patuh';
-    }
+    // Disable submit button
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+
+    try {
+        // Create violation object
+        const categoryValue = autoCategory.querySelector('span')?.textContent || 'Unknown';
+        let categoryKey = 'berat';
+        if (categoryValue.includes('RINGAN')) {
+            categoryKey = 'ringan';
+        } else if (categoryValue.includes('PATUH')) {
+            categoryKey = 'patuh';
+        }
     const violation = {
         id: Date.now(),
         locationName: locationInput.value.trim(),
         category: categoryKey,
         latitude: parseFloat(latitudeInput.value),
         longitude: parseFloat(longitudeInput.value),
-        photo: photoInput.files[0] ? photoInput.files[0] : null,
-        photoData: photoPreview.querySelector('img')?.src || null,
         timestamp: new Date().toISOString()
     };
 
-    // Save to localStorage
-    saveViolation(violation);
+        // Kirim data ke server untuk disimpan di database CSV
+        const formData = new FormData();
+        formData.append('location_name', violation.locationName);
+        formData.append('category', violation.category);
+        formData.append('latitude', violation.latitude);
+        formData.append('longitude', violation.longitude);
+        formData.append('photo_filename', currentPhotoFilename);
 
-    // Add marker to map
-    addMarker(violation);
+        // Simpan ke server database
+        const response = await fetch('/save', {
+            method: 'POST',
+            body: formData
+        });
 
-    // Update statistics
-    updateStatistics();
+        const result = await response.json();
 
-    // Show success message
-    showToast('Data berhasil disimpan!', 'success');
+        if (result.success) {
+            // Save to localStorage juga untuk cache lokal
+            saveViolation(violation);
 
-    // Clear form
-    clearForm();
+            // Add marker to map
+            addMarker(violation);
+
+            // Update statistics
+            updateStatistics();
+
+            // Show success message
+            showToast('Data berhasil disimpan ke database server!', 'success');
+
+            // Clear form
+            clearForm();
+        } else {
+            showToast('Gagal menyimpan: ' + (result.error || 'Unknown error'), 'error');
+        }
+
+    } catch (error) {
+        console.error('Save error:', error);
+        showToast('Error koneksi server: ' + error.message, 'error');
+    } finally {
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan';
+    }
 }
 
 function validateForm() {
@@ -203,6 +237,7 @@ function clearForm() {
     autoCategory.className = 'w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm';
     latitudeInput.value = '';
     longitudeInput.value = '';
+    currentPhotoFilename = null;
 }
 
 // ===== AI PREDICTION =====
@@ -285,6 +320,9 @@ async function predictImage(file) {
             showToast('Koordinat otomatis diambil dari metadata foto!', 'success');
         }
 
+        // Simpan nama foto yang diupload untuk dikirim saat simpan
+        currentPhotoFilename = result.photo_filename;
+
         predictionResult.innerHTML = `
             <div><strong>Deteksi:</strong></div>
             ${detectionsHTML}
@@ -362,9 +400,12 @@ function createMarkerIcon(category) {
 }
 
 function createPopupContent(violation) {
-    const photoHTML = violation.photoData 
-        ? `<img src="${violation.photoData}" alt="Foto" class="popup-photo" />` 
-        : '<p style="color: #94a3b8; font-style: italic;">Tidak ada foto</p>';
+    let photoHTML = '<p style="color: #94a3b8; font-style: italic;">Tidak ada foto</p>';
+    
+    // Tampilkan foto dari folder uploads jika ada
+    if (violation.filename && violation.filename !== '') {
+        photoHTML = `<img src="/uploads/${violation.filename}" alt="Foto" class="popup-photo" loading="lazy" onerror="this.style.display='none'" />`;
+    }
 
     return `
         <div class="popup-content">
@@ -382,73 +423,149 @@ function createPopupContent(violation) {
     `;
 }
 
-function deleteMarker(id) {
-    // Find marker
-    const markerIndex = markers.findIndex(m => m.id === id);
-    if (markerIndex > -1) {
-        // Remove from map
-        map.removeLayer(markers[markerIndex].marker);
+async function deleteMarker(id) {
+    try {
+        // Hapus dari database server terlebih dahulu
+        const response = await fetch(`/delete/${id}`, {
+            method: 'DELETE'
+        });
         
-        // Remove from array
-        markers.splice(markerIndex, 1);
+        const result = await response.json();
+        
+        if (result.success) {
+            // Find marker
+            const markerIndex = markers.findIndex(m => m.id === id);
+            if (markerIndex > -1) {
+                // Remove from map
+                map.removeLayer(markers[markerIndex].marker);
+                
+                // Remove from array
+                markers.splice(markerIndex, 1);
 
-        // Remove from localStorage
-        violationData = violationData.filter(v => v.id !== id);
-        localStorage.setItem('violationData', JSON.stringify(violationData));
+                // Remove from localStorage
+                violationData = violationData.filter(v => v.id !== id);
+                localStorage.setItem('violationData', JSON.stringify(violationData));
 
-        // Update statistics
-        updateStatistics();
+                // Update statistics
+                updateStatistics();
 
-        // Update heatmap if enabled
-        if (heatmapToggle.checked) {
-            updateHeatmap();
+                // Update heatmap if enabled
+                if (heatmapToggle.checked) {
+                    updateHeatmap();
+                }
+
+                showToast('Data dan foto berhasil dihapus!', 'success');
+            }
+        } else {
+            showToast('Gagal menghapus: ' + result.error, 'error');
         }
-
-        showToast('Marker berhasil dihapus!', 'success');
+        
+    } catch (error) {
+        console.error('Delete error:', error);
+        showToast('Error koneksi server', 'error');
     }
 }
 
 // ===== DATA STORAGE =====
 function saveViolation(violation) {
-    violationData.push(violation);
-    localStorage.setItem('violationData', JSON.stringify(violationData));
+    // Hanya simpan metadata saja tanpa base64 foto untuk menghindari quota error
+    const saveData = violationData.map(v => ({
+        id: v.id,
+        locationName: v.locationName,
+        category: v.category,
+        latitude: v.latitude,
+        longitude: v.longitude,
+        timestamp: v.timestamp
+    }));
+    saveData.push(violation);
+    localStorage.setItem('violationData', JSON.stringify(saveData));
 }
 
-function loadData() {
-    const storedData = localStorage.getItem('violationData');
-    if (storedData) {
-        violationData = JSON.parse(storedData);
+async function loadData() {
+    try {
+        // Ambil semua data dari database server CSV
+        const response = await fetch('/history');
+        const result = await response.json();
         
-        // Add markers for all stored data
-        violationData.forEach(violation => {
-            addMarker(violation);
-        });
+        if (result && result.detections) {
+            // Konversi format database ke format marker frontend
+            violationData = result.detections.map(item => {
+                let category = 'patuh';
+                if (item.level === 'tidak_patuh_berat') category = 'berat';
+                else if (item.level === 'tidak_patuh_ringan') category = 'ringan';
+                
+                return {
+                    id: item.id,
+                    locationName: item.location_name || `Data #${item.id}`,
+                    category: category,
+                    latitude: parseFloat(item.latitude),
+                    longitude: parseFloat(item.longitude),
+                    timestamp: item.timestamp,
+                    filename: item.filename
+                };
+            });
+            
+            // Add markers for all data
+            violationData.forEach(violation => {
+                if (violation.latitude && violation.longitude) {
+                    addMarker(violation);
+                }
+            });
 
-        // Update statistics
-        updateStatistics();
+            // Update statistics
+            updateStatistics();
+            
+            showToast(`Berhasil memuat ${violationData.length} data dari database!`, 'success');
+        }
+    } catch (error) {
+        console.error('Load data error:', error);
+        // Fallback ke localStorage jika server tidak bisa dihubungi
+        const storedData = localStorage.getItem('violationData');
+        if (storedData) {
+            violationData = JSON.parse(storedData);
+            violationData.forEach(violation => addMarker(violation));
+            updateStatistics();
+        }
     }
 }
 
-function clearAllData() {
-    // Remove all markers from map
-    markers.forEach(m => map.removeLayer(m.marker));
-    markers = [];
+async function clearAllData() {
+    try {
+        // Hapus SEMUA data dan foto di server
+        const response = await fetch('/clear-all', {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Remove all markers from map
+            markers.forEach(m => map.removeLayer(m.marker));
+            markers = [];
 
-    // Clear localStorage
-    violationData = [];
-    localStorage.removeItem('violationData');
+            // Clear localStorage
+            violationData = [];
+            localStorage.removeItem('violationData');
 
-    // Update statistics
-    updateStatistics();
+            // Update statistics
+            updateStatistics();
 
-    // Hide heatmap if visible
-    if (heatmapLayer) {
-        map.removeLayer(heatmapLayer);
-        heatmapLayer = null;
+            // Hide heatmap if visible
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+
+            hideConfirmModal();
+            showToast('Semua data dan foto berhasil dihapus!', 'success');
+        } else {
+            showToast('Gagal menghapus: ' + result.error, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Clear all error:', error);
+        showToast('Error koneksi server', 'error');
     }
-
-    hideConfirmModal();
-    showToast('Semua data berhasil dihapus!', 'success');
 }
 
 // ===== STATISTICS =====
