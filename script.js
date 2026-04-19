@@ -4,7 +4,7 @@ let markers = [];
 let heatmapLayer = null;
 let currentFilter = 'all';
 let violationData = [];
-let currentPhotoFilename = null;
+// File foto disimpan hanya saat klik simpan
 
 // DOM Elements
 const form = document.getElementById('violationForm');
@@ -153,7 +153,12 @@ async function handleFormSubmit(e) {
         formData.append('category', violation.category);
         formData.append('latitude', violation.latitude);
         formData.append('longitude', violation.longitude);
-        formData.append('photo_filename', currentPhotoFilename);
+        
+        // Kirim file foto asli untuk generate bbox saat simpan
+        const photoFile = photoInput.files[0];
+        if (photoFile) {
+            formData.append('photo', photoFile);
+        }
 
         // Simpan ke server database
         const response = await fetch('/save', {
@@ -237,7 +242,7 @@ function clearForm() {
     autoCategory.className = 'w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm';
     latitudeInput.value = '';
     longitudeInput.value = '';
-    currentPhotoFilename = null;
+
 }
 
 // ===== AI PREDICTION =====
@@ -320,8 +325,13 @@ async function predictImage(file) {
             showToast('Koordinat otomatis diambil dari metadata foto!', 'success');
         }
 
-        // Simpan nama foto yang diupload untuk dikirim saat simpan
-        currentPhotoFilename = result.photo_filename;
+        // Tampilkan preview gambar dengan bounding box
+        if (result.bbox_preview) {
+            const previewImg = photoPreview.querySelector('img');
+            if (previewImg) {
+                previewImg.src = `data:image/jpeg;base64,${result.bbox_preview}`;
+            }
+        }
 
         predictionResult.innerHTML = `
             <div><strong>Deteksi:</strong></div>
@@ -402,9 +412,9 @@ function createMarkerIcon(category) {
 function createPopupContent(violation) {
     let photoHTML = '<p style="color: #94a3b8; font-style: italic;">Tidak ada foto</p>';
     
-    // Tampilkan foto dari folder uploads jika ada
+    // Tampilkan foto dengan bounding box (sekarang filename berisi bbox_filename)
     if (violation.filename && violation.filename !== '') {
-        photoHTML = `<img src="/uploads/${violation.filename}" alt="Foto" class="popup-photo" loading="lazy" onerror="this.style.display='none'" />`;
+        photoHTML = `<img src="/uploads/${violation.filename}" alt="Foto Deteksi" class="popup-photo" loading="lazy" onerror="this.style.display='none'" />`;
     }
 
     return `
@@ -501,7 +511,8 @@ async function loadData() {
                     latitude: parseFloat(item.latitude),
                     longitude: parseFloat(item.longitude),
                     timestamp: item.timestamp,
-                    filename: item.filename
+                    filename: item.filename,
+                    bbox_filename: item.bbox_filename
                 };
             });
             
@@ -616,8 +627,14 @@ function applyFilter() {
 function toggleHeatmap() {
     if (heatmapToggle.checked) {
         showHeatmap();
+        // Sembunyikan semua marker ketika heatmap aktif
+        markers.forEach(m => {
+            m.marker.setOpacity(0);
+        });
     } else {
         hideHeatmap();
+        // Tampilkan kembali marker sesuai filter
+        applyFilter();
     }
 }
 

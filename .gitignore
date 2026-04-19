@@ -2,3 +2,6 @@
 venv/
 runs/
 uploads/
+
+# Database detections
+database_detections.csv

@@ -27,10 +27,10 @@ DATABASE_FILE = "database_detections.csv"
 DB_FIELDS = [
     'id', 'timestamp', 'latitude', 'longitude', 
     'location_name', 'status', 'level', 'total_detections', 
-    'has_merokok', 'has_rokok', 'filename'
+    'has_merokok', 'has_rokok', 'filename', 'bbox_filename'
 ]
 
-CLASS_NAMES = {0: 'Merokok', 1: 'Rokok', 2: 'Merokok', 3: 'Rokok'}
+CLASS_NAMES = {0: 'Merokok', 1: 'Rokok'}
 CONFIDENCE_THRESHOLD = 0.25
 
 # App state
@@ -73,7 +73,8 @@ def save_to_database(result, filename=None):
         'total_detections': summary.get('total', 0),
         'has_merokok': summary.get('has_merokok', False),
         'has_rokok': summary.get('has_rokok', False),
-        'filename': filename or ''
+        'filename': filename or '',
+        'bbox_filename': result.get('bbox_filename', '')
     }
     
     with open(DATABASE_FILE, 'a', newline='', encoding='utf-8') as f:
@@ -102,6 +103,12 @@ init_database()
 
 app = Flask(__name__, template_folder=PROJECT_DIR, static_folder=PROJECT_DIR, static_url_path='')
 CORS(app, supports_credentials=True, origins="*")
+
+# Serve upload folder static
+@app.route('/uploads/<filename>')
+def serve_upload(filename):
+    from flask import send_from_directory
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.before_request
 def handle_options():
@@ -178,11 +185,7 @@ def extract_gps_data(image_path):
         return None
 
 
-def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD, gps_data=None):
-    global is_predicting
-    if not model_loaded:
-        load_model()
-    
+def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD, gps_data=None, return_bbox_base64=False):
     is_predicting = True
     results = model.predict(image_path, conf=confidence, imgsz=640, device=device, verbose=False)
     is_predicting = False
@@ -192,15 +195,29 @@ def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD, gps_data=None):
     has_merokok = False
     has_rokok = False
     
+    bbox_base64 = None
+    # Generate base64 gambar dengan bbox untuk preview di FE
+    if return_bbox_base64 and results and len(results) > 0:
+        import io
+        import base64
+        from PIL import Image
+        
+        # Plot hasil deteksi ke memory
+        img_array = results[0].plot()
+        img = Image.fromarray(img_array[..., ::-1])  # BGR ke RGB
+        
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        bbox_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
     
     if results and len(results[0].boxes) > 0:
         for box in results[0].boxes:
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             class_id = int(box.cls[0])
             conf = float(box.conf[0])
-            class_name = CLASS_NAMES.get(class_id, f'class_{class_id}')
-            label = results[0].names[class_id]
-            print("Label:", label)
+            # Gunakan nama class asli dari model bukan mapping manual
+            class_name = results[0].names[class_id]
+            print("Label:", class_name)
             print("Confidence:", conf)
             
             detections.append({
@@ -212,9 +229,9 @@ def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD, gps_data=None):
             print(detected_classes)
             print(class_name)
             
-            if class_name == 'Merokok':
+            if 'merokok' in class_name.lower():
                 has_merokok = True
-            elif class_name == 'Rokok':
+            elif 'rokok' in class_name.lower():
                 has_rokok = True
     
     # Determine compliance
@@ -232,7 +249,8 @@ def predict_image(image_path, confidence=CONFIDENCE_THRESHOLD, gps_data=None):
         'has_detections': len(detections) > 0,
         'detected_classes': detected_classes,
         'compliance': compliance,
-        'summary': {'has_merokok': has_merokok, 'has_rokok': has_rokok, 'total': len(detections)}
+        'summary': {'has_merokok': has_merokok, 'has_rokok': has_rokok, 'total': len(detections)},
+        'bbox_preview': bbox_base64
     }
 
     if gps_data:
@@ -350,16 +368,29 @@ def save_manual():
         if not all([location_name, category, latitude, longitude]):
             return jsonify({'success': False, 'error': 'Data tidak lengkap'}), 400
         
-        # Ambil nama foto dari frontend (foto sudah diupload sebelumnya)
-        photo_filename = request.form.get('photo_filename', '')
+        bbox_filename = ''
         
-        # Jika upload foto baru juga diperbolehkan
-        if not photo_filename and 'photo' in request.files:
+        # Hanya simpan file jika ada upload foto
+        if 'photo' in request.files:
             photo = request.files['photo']
             if photo.filename:
-                photo_filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{photo.filename}")
-                photo_path = os.path.join(UPLOAD_FOLDER, photo_filename)
-                photo.save(photo_path)
+                # Buat nama file
+                safe_location = location_name.replace(' ', '_') if location_name else 'unknown'
+                bbox_filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_location}_bbox.jpg")
+                temp_filepath = os.path.join(UPLOAD_FOLDER, f"temp_{bbox_filename}")
+                
+                # Simpan file sementara untuk deteksi
+                photo.save(temp_filepath)
+                
+                # Lakukan deteksi dan generate bounding box
+                results = model.predict(temp_filepath, conf=CONFIDENCE_THRESHOLD, imgsz=640, device=device, verbose=False)
+                
+                # Simpan hanya gambar dengan bounding box
+                bbox_filepath = os.path.join(UPLOAD_FOLDER, bbox_filename)
+                results[0].save(filename=bbox_filepath)
+                
+                # Hapus file asli, yang disimpan hanya bbox saja
+                os.unlink(temp_filepath)
         
         # Mapping category ke compliance status
         compliance_map = {
@@ -379,16 +410,14 @@ def save_manual():
                 'has_merokok': category == 'berat',
                 'has_rokok': category == 'ringan'
             },
-            'compliance': compliance
+            'compliance': compliance,
+            'bbox_filename': bbox_filename
         }
         
-        safe_location = location_name.replace(' ', '_') if location_name else 'unknown'
-        filename = f"manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_location}"
-        
         # Simpan ke database
-        save_to_database(result, photo_filename or filename)
+        save_to_database(result, bbox_filename)
         
-        return jsonify({'success': True, 'message': 'Data tersimpan'})
+        return jsonify({'success': True, 'message': 'Data tersimpan', 'bbox_filename': bbox_filename})
         
     except Exception as e:
         print(f"Save error: {e}")
@@ -397,6 +426,7 @@ def save_manual():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    import tempfile
     if 'file' not in request.files:
         return jsonify({'error': 'No file', 'detections': []}), 400
     
@@ -405,25 +435,25 @@ def predict():
         return jsonify({'error': 'No file', 'detections': []}), 400
     
     confidence = request.args.get('confidence', type=float, default=CONFIDENCE_THRESHOLD)
-    print(confidence)
-    # Save and predict
-    filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
+    
+    # Buat file sementara saja, tidak simpan permanen
+    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+        file.save(temp_file.name)
+        temp_filepath = temp_file.name
 
     # Extract GPS data from image
-    gps_data = extract_gps_data(filepath)
+    gps_data = extract_gps_data(temp_filepath)
     if gps_data:
         print(f"GPS data extracted: {gps_data}")
 
-    result = predict_image(filepath, confidence, gps_data)
+    result = predict_image(temp_filepath, confidence, gps_data, return_bbox_base64=True)
     
-    # HAPUS otomatis simpan DB. Foto TETAP disimpan di uploads, tidak dihapus.
-    # User harus klik tombol SIMPAN secara manual untuk masuk ke database
+    # Hapus file sementara setelah deteksi
+    import os
+    os.unlink(temp_filepath)
     
     return jsonify({
-        **result,
-        'photo_filename': filename
+        **result
     })
 
 
