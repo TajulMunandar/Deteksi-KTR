@@ -81,7 +81,7 @@ def train(
     batch: int = 16,
     data: str = "data.yaml",
     workers: int = None,
-    patience: int = 10,
+    patience: int = 20,
     val_split: float = 0.15,
     project: str = None,
     name: str = "exp",

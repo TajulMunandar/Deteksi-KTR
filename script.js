@@ -3,6 +3,7 @@ let map;
 let markers = [];
 let heatmapLayer = null;
 let currentFilter = 'all';
+let currentTimeFilter = 'all';
 let violationData = [];
 // File foto disimpan hanya saat klik simpan
 
@@ -19,6 +20,8 @@ const clearFormBtn = document.getElementById('clearFormBtn');
 const clearAllBtn = document.getElementById('clearAllBtn');
 const heatmapToggle = document.getElementById('heatmapToggle');
 const filterButtons = document.querySelectorAll('.filter-btn');
+const segmentButtons = document.querySelectorAll('.segment');
+const timeChipButtons = document.querySelectorAll('.time-chip');
 const confirmModal = document.getElementById('confirmModal');
 const confirmMessage = document.getElementById('confirmMessage');
 const cancelConfirm = document.getElementById('cancelConfirm');
@@ -85,32 +88,37 @@ function initMap() {
 // ===== EVENT LISTENERS =====
 function setupEventListeners() {
     // Form submission
-    form.addEventListener('submit', handleFormSubmit);
+    if (form) form.addEventListener('submit', handleFormSubmit);
 
     // Photo preview
-    photoInput.addEventListener('change', handlePhotoPreview);
+    if (photoInput) photoInput.addEventListener('change', handlePhotoPreview);
 
     // Clear form button
-    clearFormBtn.addEventListener('click', clearForm);
+    if (clearFormBtn) clearFormBtn.addEventListener('click', clearForm);
 
     // Clear all data button
-    clearAllBtn.addEventListener('click', () => {
+    if (clearAllBtn) clearAllBtn.addEventListener('click', () => {
         showConfirmModal('Apakah Anda yakin ingin menghapus semua data?', () => {
             clearAllData();
         });
     });
 
-    // Heatmap toggle
-    heatmapToggle.addEventListener('change', toggleHeatmap);
+    // Heatmap toggle - redesigned button
+    if (heatmapToggle) heatmapToggle.addEventListener('click', toggleHeatmap);
 
     // Filter buttons
-    filterButtons.forEach(btn => {
+    segmentButtons.forEach(btn => {
         btn.addEventListener('click', () => handleFilter(btn.dataset.filter));
     });
 
+    // Time filter buttons
+    timeChipButtons.forEach(btn => {
+        btn.addEventListener('click', () => handleTimeFilter(btn.dataset.timeFilter));
+    });
+
     // Modal events
-    cancelConfirm.addEventListener('click', hideConfirmModal);
-    confirmModal.addEventListener('click', (e) => {
+    if (cancelConfirm) cancelConfirm.addEventListener('click', hideConfirmModal);
+    if (confirmModal) confirmModal.addEventListener('click', (e) => {
         if (e.target === confirmModal) hideConfirmModal();
     });
 }
@@ -287,11 +295,12 @@ async function predictImage(file) {
         const compliance = result.compliance || {};
         
         // Determine category based on user's rules:
-        // - Ada Rokok = ringan
+        // - Ada Rokok atau Asbak = ringan
         // - Ada Merokok = berat
         // - Tidak ada keduanya = patuh
         const hasMerokok = result.summary?.has_merokok || false;
         const hasRokok = result.summary?.has_rokok || false;
+        const hasAsbak = result.summary?.has_asbak || false;
         
         let categoryValue = '';
         let categoryText = '';
@@ -301,7 +310,7 @@ async function predictImage(file) {
             categoryValue = 'berat';
             categoryText = '🔴 PELANGGARAN BERAT';
             badgeClass = 'berat';
-        } else if (hasRokok) {
+        } else if (hasRokok || hasAsbak) {
             categoryValue = 'ringan';
             categoryText = '⚠️ PELANGGARAN RINGAN';
             badgeClass = 'ringan';
@@ -365,7 +374,8 @@ function addMarker(violation) {
     markers.push({
         id: violation.id,
         marker: marker,
-        category: violation.category
+        category: violation.category,
+        timestamp: violation.timestamp
     });
 
     // Apply current filter
@@ -457,10 +467,10 @@ async function deleteMarker(id) {
                 localStorage.setItem('violationData', JSON.stringify(violationData));
 
                 // Update statistics
-                updateStatistics();
+                updateAllVisualization();
 
                 // Update heatmap if enabled
-                if (heatmapToggle.checked) {
+                if (heatmapToggle.classList.contains('heatmap-active')) {
                     updateHeatmap();
                 }
 
@@ -523,8 +533,8 @@ async function loadData() {
                 }
             });
 
-            // Update statistics
-            updateStatistics();
+            // Update statistics and count badges
+            updateAllVisualization();
             
             showToast(`Berhasil memuat ${violationData.length} data dari database!`, 'success');
         }
@@ -535,7 +545,7 @@ async function loadData() {
         if (storedData) {
             violationData = JSON.parse(storedData);
             violationData.forEach(violation => addMarker(violation));
-            updateStatistics();
+            updateAllVisualization();
         }
     }
 }
@@ -559,13 +569,15 @@ async function clearAllData() {
             localStorage.removeItem('violationData');
 
             // Update statistics
-            updateStatistics();
+            updateAllVisualization();
 
-            // Hide heatmap if visible
+            // Hide heatmap if visible and reset toggle state
             if (heatmapLayer) {
                 map.removeLayer(heatmapLayer);
                 heatmapLayer = null;
             }
+            heatmapToggle.classList.remove('heatmap-active');
+            heatmapToggle.classList.add('heatmap-off');
 
             hideConfirmModal();
             showToast('Semua data dan foto berhasil dihapus!', 'success');
@@ -580,12 +592,12 @@ async function clearAllData() {
 }
 
 // ===== STATISTICS =====
-function updateStatistics() {
+function updateStatistics(filteredData = violationData) {
     const stats = {
-        patuh: violationData.filter(v => v.category === 'patuh').length,
-        ringan: violationData.filter(v => v.category === 'ringan').length,
-        berat: violationData.filter(v => v.category === 'berat').length,
-        total: violationData.length
+        patuh: filteredData.filter(v => v.category === 'patuh').length,
+        ringan: filteredData.filter(v => v.category === 'ringan').length,
+        berat: filteredData.filter(v => v.category === 'berat').length,
+        total: filteredData.length
     };
 
     document.getElementById('statPatuh').textContent = stats.patuh;
@@ -598,8 +610,8 @@ function updateStatistics() {
 function handleFilter(filter) {
     currentFilter = filter;
 
-    // Update button states
-    filterButtons.forEach(btn => {
+    // Update segmented button states
+    segmentButtons.forEach(btn => {
         if (btn.dataset.filter === filter) {
             btn.classList.add('active');
         } else {
@@ -607,49 +619,166 @@ function handleFilter(filter) {
         }
     });
 
+    // Update status indicator
+    updateStatusIndicator(filter);
+
     // Apply filter
+    updateAllVisualization();
+}
+
+function handleTimeFilter(filter) {
+    currentTimeFilter = filter;
+
+    // Update chip states
+    timeChipButtons.forEach(btn => {
+        if (btn.dataset.timeFilter === filter) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Apply filter
+    updateAllVisualization();
+}
+
+function updateStatusIndicator(filter) {
+    const indicator = document.getElementById('statusIndicator');
+    if (!indicator) return;
+    
+    const labels = {
+        all: 'Semua',
+        patuh: 'Patuh',
+        ringan: 'Ringan',
+        berat: 'Berat'
+    };
+    
+    const classes = {
+        all: 'indicator-all',
+        patuh: 'indicator-patuh',
+        ringan: 'indicator-ringan',
+        berat: 'indicator-berat'
+    };
+    
+    indicator.className = `filter-indicator ${classes[filter]}`;
+    indicator.innerHTML = `<span class="w-2 h-2 ${filter === 'patuh' ? 'bg-green-500' : filter === 'ringan' ? 'bg-yellow-500' : filter === 'berat' ? 'bg-red-500' : 'bg-slate-500'} rounded-full"></span>${labels[filter]}`;
+}
+
+function updateCountBadges() {
+    // Safety check - elements might not exist if DOM not ready
+    const countAll = document.getElementById('count-all');
+    const countPatuh = document.getElementById('count-patuh');
+    const countRingan = document.getElementById('count-ringan');
+    const countBerat = document.getElementById('count-berat');
+    
+    if (!countAll || !countPatuh || !countRingan || !countBerat) return;
+    
+    const filteredData = violationData.filter(v => {
+        let categoryMatch = currentFilter === 'all' || v.category === currentFilter;
+        let timeMatch = currentTimeFilter === 'all' || getTimePeriod(v.timestamp) === currentTimeFilter;
+        return categoryMatch && timeMatch;
+    });
+    
+    const stats = {
+        all: filteredData.length,
+        patuh: filteredData.filter(v => v.category === 'patuh').length,
+        ringan: filteredData.filter(v => v.category === 'ringan').length,
+        berat: filteredData.filter(v => v.category === 'berat').length
+    };
+    
+    countAll.textContent = stats.all;
+    countPatuh.textContent = stats.patuh;
+    countRingan.textContent = stats.ringan;
+    countBerat.textContent = stats.berat;
+}
+
+function updateAllVisualization() {
+    const filteredData = violationData.filter(v => {
+        const categoryMatch = currentFilter === 'all' || v.category === currentFilter;
+        const timeMatch = currentTimeFilter === 'all' || getTimePeriod(v.timestamp) === currentTimeFilter;
+        return categoryMatch && timeMatch;
+    });
+    
     applyFilter();
+    updateStatistics(filteredData);
+    updateCountBadges();
+    
+    // ✅ Gunakan heatmapLayer sebagai source of truth
+    if (heatmapLayer !== null) {
+        hideHeatmap();
+        showHeatmap();
+    }
+}
+
+function getTimePeriod(timestamp) {
+    const date = new Date(timestamp);
+    const hour = date.getHours();
+
+    if (hour >= 7 && hour < 12) return 'pagi';
+    if (hour >= 12 && hour < 15) return 'siang';
+    if (hour >= 15 && hour <= 18) return 'sore';
+    return null;
 }
 
 function applyFilter() {
     markers.forEach(m => {
-        if (currentFilter === 'all' || m.category === currentFilter) {
-            m.marker.setOpacity(1);
-            m.marker.setZIndexOffset(1000);
+        const categoryMatch = currentFilter === 'all' || m.category === currentFilter;
+        const timeMatch = currentTimeFilter === 'all' || getTimePeriod(m.timestamp) === currentTimeFilter;
+        
+        if (categoryMatch && timeMatch) {
+            // ✅ Tambahkan ke map jika belum ada
+            if (!map.hasLayer(m.marker)) {
+                m.marker.addTo(map);
+            }
         } else {
-            m.marker.setOpacity(0);
-            m.marker.setZIndexOffset(0);
+            // ✅ Hapus dari map agar benar-benar tersembunyi
+            if (map.hasLayer(m.marker)) {
+                map.removeLayer(m.marker);
+            }
         }
     });
 }
 
 // ===== HEATMAP =====
 function toggleHeatmap() {
-    if (heatmapToggle.checked) {
+    // ✅ Gunakan heatmapLayer sebagai source of truth
+    if (heatmapLayer === null) {
+        heatmapToggle.classList.remove('heatmap-off');
+        heatmapToggle.classList.add('heatmap-active');
         showHeatmap();
-        // Sembunyikan semua marker ketika heatmap aktif
         markers.forEach(m => {
-            m.marker.setOpacity(0);
+            if (map.hasLayer(m.marker)) map.removeLayer(m.marker);
         });
     } else {
+        heatmapToggle.classList.remove('heatmap-active');
+        heatmapToggle.classList.add('heatmap-off');
         hideHeatmap();
-        // Tampilkan kembali marker sesuai filter
-        applyFilter();
+        applyFilter(); // ✅ restore marker sesuai filter aktif
     }
 }
 
 function showHeatmap() {
-    // Get violations with berat category
-    const beratViolations = violationData.filter(v => v.category === 'berat');
+    // Get violations that match current filters
+    // Display heatmap visualization based on filtered data
+    const filteredViolations = violationData.filter(v => {
+        let categoryMatch = currentFilter === 'all' || v.category === currentFilter;
+        let timeMatch = currentTimeFilter === 'all' || getTimePeriod(v.timestamp) === currentTimeFilter;
+        return categoryMatch && timeMatch;
+    });
 
-    if (beratViolations.length === 0) {
-        showToast('Tidak ada pelanggaran berat untuk ditampilkan!', 'info');
-        heatmapToggle.checked = false;
+    if (filteredViolations.length === 0) {
+        showToast('Tidak ada data untuk ditampilkan di heatmap!', 'info');
+        heatmapToggle.classList.remove('heatmap-active');
+        heatmapToggle.classList.add('heatmap-off');
         return;
     }
 
-    // Create heatmap data
-    const heatData = beratViolations.map(v => [v.latitude, v.longitude, 0.8]);
+    // Create heatmap data with intensity based on category
+    const heatData = filteredViolations.map(v => {
+        // Different intensity for different categories
+        const intensity = v.category === 'berat' ? 0.8 : v.category === 'ringan' ? 0.5 : 0.3;
+        return [v.latitude, v.longitude, intensity];
+    });
 
     // Add heatmap layer
     heatmapLayer = L.heatLayer(heatData, {
@@ -657,15 +786,15 @@ function showHeatmap() {
         blur: 15,
         maxZoom: 17,
         gradient: {
-            0.2: 'blue',
-            0.4: 'cyan',
-            0.6: 'lime',
-            0.8: 'yellow',
-            1.0: 'red'
+            0.2: '#3b82f6',
+            0.4: '#60a5fa',
+            0.6: '#fbbf24',
+            0.8: '#f97316',
+            1.0: '#ef4444'
         }
     }).addTo(map);
 
-    showToast('Heatmap pelanggaran berat ditampilkan!', 'info');
+    showToast('Heatmap ditampilkan!', 'info');
 }
 
 function hideHeatmap() {
@@ -676,7 +805,7 @@ function hideHeatmap() {
 }
 
 function updateHeatmap() {
-    if (heatmapToggle.checked) {
+    if (heatmapToggle.classList.contains('heatmap-active')) {
         hideHeatmap();
         showHeatmap();
     }

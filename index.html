@@ -178,64 +178,105 @@
                                      <span class="text-xs text-blue-700">Upload foto untuk koordinat otomatis, atau klik peta</span>
                                  </div>
 
-                                <div class="flex gap-2">
-                                    <button type="submit" class="flex-1 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold py-2 px-3 rounded-lg shadow-md flex items-center justify-center gap-2 text-sm">
-                                        <i class="fas fa-save"></i> Simpan
-                                    </button>
-                                    <button type="button" id="clearFormBtn" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-lg flex items-center justify-center">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
-                                </div>
+                                 <div class="flex gap-2">
+                                     <button type="submit" class="flex-1 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold py-2 px-3 rounded-lg shadow-md flex items-center justify-center gap-2 text-sm">
+                                         <i class="fas fa-save"></i> Simpan
+                                     </button>
+                                     <button type="button" id="clearFormBtn" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-lg flex items-center justify-center">
+                                         <i class="fas fa-undo"></i>
+                                     </button>
+                                 </div>
+
+                                 <div class="pt-2 border-t border-slate-100">
+                                     <button type="button" id="clearAllBtn" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 text-sm border border-red-200">
+                                         <i class="fas fa-trash-alt"></i> Hapus Semua Data
+                                     </button>
+                                 </div>
                             </form>
                         </div>
                     </div>
                 </aside>
 
-                <!-- Right Panel -->
+<!-- Right Panel -->
                 <section class="flex-1 flex flex-col gap-4">
-                    <!-- Filter & Data Management - Above Map -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <!-- Filter Card -->
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="flex items-center gap-2">
-                                    <i class="fas fa-filter text-primary-500"></i>
-                                    <span class="font-semibold text-slate-700 text-sm">Filter</span>
-                                </div>
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <span class="text-xs text-slate-500">Heatmap</span>
-                                    <div class="relative">
-                                        <input type="checkbox" id="heatmapToggle" class="sr-only peer">
-                                        <div class="w-8 h-4 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[1px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-red-500"></div>
-                                    </div>
-                                </label>
+                    <!-- Redesigned Filter Section -->
+                    <div class="filters-container">
+                        <!-- Heatmap Toggle - Prominent Position -->
+                        <div class="filter-card w-full lg:w-auto">
+                            <div class="filter-card-header">
+                                <i class="fas fa-fire-flame-curved text-primary-500"></i>
+                                <span class="filter-card-title">Heatmap Visualization</span>
                             </div>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button class="filter-btn active px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium rounded-lg" data-filter="all">
-                                    Semua
-                                </button>
-                                <button class="filter-btn px-2.5 py-1 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-lg" data-filter="patuh">
-                                    Patuh
-                                </button>
-                                <button class="filter-btn px-2.5 py-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-xs font-medium rounded-lg" data-filter="ringan">
-                                    Ringan
-                                </button>
-                                <button class="filter-btn px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium rounded-lg" data-filter="berat">
-                                    Berat
-                                </button>
-                            </div>
+                            <button id="heatmapToggle" class="heatmap-toggle heatmap-off" role="switch" aria-label="Toggle Heatmap">
+                                <span class="toggle-icon">
+                                    <i class="fas fa-fire-flame-curved"></i>
+                                </span>
+                                <span class="toggle-text">Heatmap</span>
+                            </button>
+                            <p class="text-xs text-slate-500 mt-3">
+                                Heatmap menampilkan konsentrasi pelanggaran berat secara visual
+                            </p>
                         </div>
 
-                        <!-- Data Management Card -->
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <i class="fas fa-database text-slate-500"></i>
-                                <span class="font-semibold text-slate-700 text-sm">Kelola Data</span>
+                        <!-- Filter Row: Status + Time -->
+                        <div class="filters-row w-full">
+                            <!-- Status Filter - Segmented Control -->
+                            <div class="filter-card">
+                                <div class="filter-with-indicator">
+                                    <div class="filter-card-header">
+                                        <i class="fas fa-filter text-primary-500"></i>
+                                        <span class="filter-card-title">Filter Status</span>
+                                    </div>
+                                    <span id="statusIndicator" class="filter-indicator indicator-patuh">
+                                        <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                                        Patuh
+                                    </span>
+                                </div>
+                                <div class="segmented-control" role="radiogroup">
+                                    <button class="segment active" data-filter="all">
+                                        Semua
+                                        <span class="count" id="count-all">0</span>
+                                    </button>
+                                    <button class="segment" data-filter="patuh">
+                                        Patuh
+                                        <span class="count" id="count-patuh">0</span>
+                                    </button>
+                                    <button class="segment" data-filter="ringan">
+                                        Ringan
+                                        <span class="count" id="count-ringan">0</span>
+                                    </button>
+                                    <button class="segment" data-filter="berat">
+                                        Berat
+                                        <span class="count" id="count-berat">0</span>
+                                    </button>
+                                </div>
                             </div>
-                            <button id="clearAllBtn" class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-lg flex items-center gap-1.5">
-                                <i class="fas fa-trash-alt"></i>
-                                Hapus Semua
-                            </button>
+
+                            <!-- Time Filter - Horizontal Chips -->
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <i class="fas fa-clock text-primary-500"></i>
+                                    <span class="filter-card-title">Filter Waktu</span>
+                                </div>
+                                <div class="time-chips" role="radiogroup">
+                                    <button class="time-chip active" data-time-filter="all">
+                                        <i class="fas fa-infinity"></i>
+                                        <span>Semua Waktu</span>
+                                    </button>
+                                    <button class="time-chip" data-time-filter="pagi">
+                                        <i class="fas fa-sun"></i>
+                                        <span>Pagi (07-11)</span>
+                                    </button>
+                                    <button class="time-chip" data-time-filter="siang">
+                                        <i class="fas fa-cloud-sun"></i>
+                                        <span>Siang (12-14)</span>
+                                    </button>
+                                    <button class="time-chip" data-time-filter="sore">
+                                        <i class="fas fa-cloud"></i>
+                                        <span>Sore (15-18)</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
